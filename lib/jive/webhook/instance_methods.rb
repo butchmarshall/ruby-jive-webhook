@@ -32,10 +32,13 @@ module Jive
 
 					response = http.request(request)
 
-					# Got access token from Jive
-					if (response.code.to_i === 201)
-						#json_body = JSON.parse(response.body)
+					# Need 2XX status code
+					if !response.code.to_i.between?(200, 299)
+						errors[:base] << "#{request.inspect} => #{response.body}"
+						return false
 					end
+
+					true
 				end
 
 				# Registers the webhook with Jive
@@ -47,27 +50,32 @@ module Jive
 					uri = URI.parse("#{self.add_on.jive_url}/api/core/v3/webhooks")
 					http = Net::HTTP.new(uri.host, uri.port)
 					http.use_ssl = true
+					#http.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
 					request = Net::HTTP::Post.new(uri.request_uri)
 
 					request["Content-Type"] = "application/json"
 					request["Authorization"] = "Bearer #{self.oauth_token.access_token}"
 
-					request.body = {
-						"events" => self.events,
+					body = {
 						"callback" => self.callback,
 						"object" => self.object,
-					}.to_json
+					}
+					body["events"] = self.events if !self.events.to_s.empty?
+
+					request.body = body.to_json
 
 					response = http.request(request)
 
-					errors[:base] << "#{request.inspect} => #{response.inspect}"
-
-					# Got access token from Jive
+					# Need 2XX status code
 					if !response.code.to_i.between?(200, 299)
-						#json_body = JSON.parse(response.body)
+						errors[:base] << "#{request.inspect} => #{response.body}"
 						return false
 					end
+
+					json_body = JSON.parse(response.body)
+
+					self.webhook_id = json_body["id"]
 
 					true
 				end
